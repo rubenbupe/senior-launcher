@@ -27,9 +27,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
+        with:
+          gradle-version: '8.7'
 
       - name: Resolve version values
         id: version
@@ -43,7 +42,7 @@ jobs:
 
       - name: Build release APK
         run: >
-          ./gradlew :app:assembleRelease
+          gradle :app:assembleRelease
           -PciVersionName=${{ steps.version.outputs.version_name }}
           -PciVersionCode=${{ steps.version.outputs.version_code }}
 
