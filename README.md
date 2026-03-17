@@ -11,6 +11,20 @@ It is ideated as an Android-first experience inspired by the iPhone Guided Acces
 - Lets you choose and sort allowed apps shown on the home screen.
 - Can optionally sync with a backend for real-time remote control.
 
+## Screenshots
+
+| Home | Phone - Favorites | Phone - Contacts |
+|---|---|---|
+| <img src="assets/images/ss_home.png" alt="Senior Launcher Home" width="220" /> | <img src="assets/images/ss_phone_contact_fav.png" alt="Phone favorites" width="220" /> | <img src="assets/images/ss_phone_contact_list.png" alt="Phone contacts list" width="220" /> |
+
+| Phone - Contact detail | Messages - List | Messages - Thread |
+|---|---|---|
+| <img src="assets/images/ss_phone_contact_detail.png" alt="Phone contact detail" width="220" /> | <img src="assets/images/ss_messages.png" alt="Messages list" width="220" /> | <img src="assets/images/ss_messages_thread.png" alt="Messages thread" width="220" /> |
+
+| Camera | Gallery | Flashlight |
+|---|---|---|
+| <img src="assets/images/ss_camera.png" alt="Camera mode picker" width="220" /> | <img src="assets/images/ss_gallery.png" alt="Gallery timeline" width="220" /> | <img src="assets/images/ss_flashlight.png" alt="Flashlight screen" width="220" /> |
+
 ## How it works
 
 The app keeps local state (preferences, app order, internal modes) and, when sync is enabled, opens a WebSocket connection to the backend to:
