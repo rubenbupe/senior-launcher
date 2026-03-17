@@ -4,7 +4,7 @@ Senior Launcher is an Android launcher app designed for older users, with a simp
 
 It is ideated as an Android-first experience inspired by the iPhone Guided Access mode, focused on reducing distractions and making daily use easier for seniors.
 
-[![Get it on Obtainium](https://github-production-user-asset-6210df.s3.amazonaws.com/30463115/393344052-713d71c5-3dec-4ec4-a3f2-8d28d025a9c6.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVCODYLSA53PQK4ZA%2F20260317%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260317T233120Z&X-Amz-Expires=300&X-Amz-Signature=760d72ab282accde6cb0991aa9ff56a13fb1988f5ed3a70e2ab0457fa40502b5&X-Amz-SignedHeaders=host)](http://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/rubenbupe/senior-launcher)
+[![Get it on Obtainium](assets/images/obtainium.png)](http://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/rubenbupe/senior-launcher)
 
 ## What it is
 
