@@ -4,6 +4,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+val ciVersionCode = (project.findProperty("ciVersionCode") as String?)?.toIntOrNull()
+val ciVersionName = (project.findProperty("ciVersionName") as String?)
+
 android {
     namespace = "com.seniorlauncher.app"
     compileSdk = 36
@@ -12,8 +15,8 @@ android {
         applicationId = "com.seniorlauncher.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = ciVersionCode ?: 1
+        versionName = ciVersionName ?: "1.0"
     }
 
     buildTypes {
