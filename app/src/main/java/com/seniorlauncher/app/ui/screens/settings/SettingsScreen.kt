@@ -1,5 +1,6 @@
 package com.seniorlauncher.app.ui.screens.settings
 
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.seniorlauncher.app.AllowedAppOption
@@ -96,6 +98,27 @@ fun SettingsScreen(
     ) -> Unit
 ) {
     val context = LocalContext.current
+    val appVersionLabel = remember(context) {
+        runCatching {
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            val versionName = packageInfo.versionName ?: "-"
+            val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode.toLong()
+            }
+            "Versión $versionName ($versionCode)"
+        }.getOrDefault("Versión -")
+    }
     var userName by remember(initialUserName) { mutableStateOf(initialUserName) }
     var useWhatsApp by remember(initialUseWhatsApp) { mutableStateOf(initialUseWhatsApp) }
     var protectDndMode by remember(initialProtectDndMode) { mutableStateOf(initialProtectDndMode) }
@@ -522,6 +545,15 @@ fun SettingsScreen(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(18.dp))
+                Text(
+                    text = appVersionLabel,
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
             }
         },
         bottomBar = {
