@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Senior Launcher - Panel Device</title>
+  <style>
+    :root { --bg:#f6f4ff; --surface:#fff; --primary:#4f46e5; --primary-soft:#ede9fe; --text:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+    * { box-sizing: border-box; }
+    html, body { max-width: 100%; overflow-x: hidden; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: radial-gradient(circle at top, #ebe7ff, var(--bg) 50%); color: var(--text); }
+    .topbar { position: sticky; top: 0; z-index: 5; background: var(--primary); color: #fff; padding: 14px 18px; box-shadow: 0 4px 14px rgba(79,70,229,.25); }
+    .topbar h1 { margin: 0; font-size: 21px; font-weight: 800; }
+    .topbar small { opacity: .9; }
+    .wrap { max-width: 1120px; margin: 18px auto; padding: 0 14px 24px; overflow-x: hidden; }
+    .card { background: var(--surface); border-radius: 20px; padding: 16px; margin-bottom: 14px; border: 1px solid #f1f5f9; box-shadow: 0 8px 24px rgba(31,41,55,.08); }
+    .card h2 { margin: 0 0 12px; font-size: 20px; }
+    .grid { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+    .grid3 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr 1fr; }
+    .split { display: grid; gap: 14px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+    label { display: block; font-size: 12px; margin-bottom: 6px; color: var(--muted); }
+    input, select, button { font: inherit; }
+    input, select { width: 100%; border: 1px solid var(--line); border-radius: 14px; padding: 12px 13px; background: #fff; }
+    button { border: 0; border-radius: 14px; background: var(--primary); color: #fff; padding: 12px 16px; cursor: pointer; font-weight: 700; }
+    button[disabled] { opacity: .5; cursor: not-allowed; }
+    .action-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+    .ok { background:#dcfce7; color:#166534; }
+    .bad { background:#fee2e2; color:#991b1b; }
+    .warn { color:#9a3412; background:#ffedd5; padding:10px 12px; border-radius:12px; font-size:14px; }
+    .check-grid { display:grid; gap:10px; grid-template-columns:1fr 1fr 1fr; margin-top:10px; }
+    .check-item { background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:10px; }
+    .check-item label { margin:0; font-size:14px; color:#334155; display:flex; align-items:center; gap:8px; }
+    .app-columns { display:grid; gap:10px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 10px; }
+    .app-list { background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:10px; min-height: 220px; }
+    #selectedAppsList, #availableAppsList { max-height: 360px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
+    .app-item { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:8px 10px; margin-bottom:8px; }
+    .app-item { min-width: 0; }
+    .app-item:last-child { margin-bottom:0; }
+    .app-meta { display:flex; flex-direction:column; min-width:0; }
+    .app-label { font-size:14px; font-weight:700; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .app-id { font-size:11px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .app-actions { display:flex; gap:6px; }
+    .app-actions button { min-width:32px; height:32px; border-radius:10px; padding:0; font-size:14px; }
+    .app-actions .light { background:#fff; color:#4f46e5; border:1px solid #d7d9ff; }
+    .preview-list { display:flex; flex-direction:column; gap:8px; max-height:360px; overflow-y:auto; overflow-x:hidden; }
+    .preview-item { border:1px solid #e2e8f0; border-radius:10px; padding:10px; background:#fff; }
+    .preview-item h4 { margin:0 0 4px; font-size:14px; }
+    .preview-item p { margin:0; color:#475569; font-size:13px; }
+    .photo-thumb { width:100%; max-height:140px; object-fit:cover; border-radius:8px; margin-bottom:8px; background:#f1f5f9; }
+    .device-info { display:grid; gap:8px; margin-bottom:10px; }
+    .device-info-row { display:grid; grid-template-columns: 160px minmax(0,1fr); gap:8px; font-size:13px; }
+    .device-info-key { color:#64748b; font-weight:700; }
+    .device-info-val { color:#1e293b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    pre { margin:0; background:#0f172a; color:#dbeafe; border-radius:14px; padding:12px; max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+    @media (max-width: 980px) { .grid, .grid3, .check-grid, .split, .app-columns { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Senior Launcher</h1>
+    <small>Panel de control del dispositivo</small>
+  </div>
+  <div class="wrap">
+    <div class="card">
+      <h2>Conexión</h2>
+      <div class="grid3">
+        <div><label>Device ID</label><input id="deviceId" value="test" /></div>
+        <div><label>Token (opcional)</label><input id="token" placeholder="si configuraste BACKEND_API_TOKEN" /></div>
+        <div><label>Conexión</label><button id="connectBtn" type="button">Conectar WebSocket</button></div>
+      </div>
+      <div class="action-row"><p id="status"></p></div>
+      <div id="persistWarn" class="warn" style="display:none; margin-top:8px;">Este device aún no ha persistido su configuración. No se pueden enviar cambios hasta que el teléfono reporte deviceState.</div>
+    </div>
+
+    <div class="split">
+      <div class="card">
+        <h2>Configuración del dispositivo</h2>
+        <div class="grid">
+          <div><label>Nombre</label><input id="userName" placeholder="Herminia" /></div>
+          <div><label>Volumen bloqueado (0-100)</label><input id="lockedVolumePercent" type="number" min="0" max="100" placeholder="70" /></div>
+        </div>
+        <div class="grid" style="margin-top:10px;">
+          <div><label>URL backend</label><input id="backendServerUrl" placeholder="http://192.168.1.10:8080" /></div>
+          <div><label>Device ID backend</label><input id="backendDeviceId" placeholder="test" /></div>
+        </div>
+        <div class="grid" style="margin-top:10px;">
+          <div><label>API token backend</label><input id="backendApiToken" placeholder="token opcional" /></div>
+          <div></div>
+        </div>
+
+        <div class="check-grid">
+          <div class="check-item"><label><input id="useWhatsApp" type="checkbox" checked /> Usar WhatsApp</label></div>
+          <div class="check-item"><label><input id="protectDndMode" type="checkbox" checked /> Proteger No molestar</label></div>
+          <div class="check-item"><label><input id="lockDeviceVolume" type="checkbox" checked /> Bloquear volumen</label></div>
+          <div class="check-item"><label><input id="backendSyncEnabled" type="checkbox" /> Sync backend activada</label></div>
+          <div class="check-item"><label><input id="navigationAnimationsEnabled" type="checkbox" checked /> Animaciones navegación</label></div>
+          <div class="check-item"><label><input id="showSosButton" type="checkbox" checked /> Mostrar botón SOS</label></div>
+        </div>
+        <div style="margin-top:10px;">
+          <label>Número SOS</label>
+          <input id="sosPhoneNumber" placeholder="112" />
+        </div>
+
+        <div style="margin-top:12px;">
+          <h2>Apps permitidas</h2>
+          <div class="app-columns">
+            <div class="app-list">
+              <label style="margin-bottom:10px;">Seleccionadas (orden home)</label>
+              <div id="selectedAppsList"></div>
+            </div>
+            <div class="app-list">
+              <label style="margin-bottom:10px;">Disponibles</label>
+              <div id="availableAppsList"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-row"><button id="sendConfigBtn" type="button">Aplicar configuración</button></div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2>Control remoto</h2>
+          <div class="grid3">
+            <div>
+              <label>Acción</label>
+              <select id="actionType">
+                <option value="call">Llamar</option>
+                <option value="createContact">Crear contacto</option>
+                <option value="markAllSmsRead">Marcar todos los SMS como leídos</option>
+                <option value="deleteAllSms">Borrar todos los SMS</option>
+                <option value="killApp">Reiniciar app</option>
+              </select>
+            </div>
+            <div id="actionPhoneGroup"><label>Teléfono</label><input id="actionPhone" placeholder="+34123456789" /></div>
+            <div id="actionNameGroup"><label>Nombre contacto</label><input id="actionName" placeholder="Nuevo contacto" /></div>
+          </div>
+          <div class="action-row"><button id="runActionBtn" type="button">Enviar acción</button></div>
+        </div>
+
+        <div class="card">
+          <h2>Estado</h2>
+          <div id="deviceInfo" class="device-info"></div>
+          <pre id="deviceState">Sin datos</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>SMS recientes</h2>
+      <div class="action-row" style="margin-bottom:10px;"><button id="requestSmsBtn" type="button">Solicitar SMS</button></div>
+      <div id="smsPreview" class="preview-list"></div>
+    </div>
+
+    <div class="card">
+      <h2>Eventos</h2>
+      <pre id="events">Esperando...</pre>
+    </div>
+  </div>
+
+  <script src="/panel.js" defer></script>
+</body>
+</html>

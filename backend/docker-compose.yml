@@ -1,0 +1,15 @@
+services:
+  seniorlauncher-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: seniorlauncher-backend
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      BACKEND_API_TOKEN: ""
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./device-sync-store.json:/app/device-sync-store.json
