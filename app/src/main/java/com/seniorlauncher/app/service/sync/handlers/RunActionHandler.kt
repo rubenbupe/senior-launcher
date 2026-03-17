@@ -1,4 +1,3 @@
-// service/sync/handlers/RunActionHandler.kt
 package com.seniorlauncher.app.service.sync.handlers
 
 import android.Manifest

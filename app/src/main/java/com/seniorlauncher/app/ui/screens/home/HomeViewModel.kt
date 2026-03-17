@@ -40,7 +40,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// ─── HomeMain ────────────────────────────────────────────────────────────────
 
 data class HomeMainUiState(val greeting: String = "")
 
@@ -61,7 +60,6 @@ class HomeMainViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
-// ─── Settings ────────────────────────────────────────────────────────────────
 
 data class SettingsUiState(
     val settings: AppSettingsSnapshot = AppSettingsSnapshot(
@@ -179,7 +177,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
         } else true
 
-    // ── enforcement ────────────────────────────────────────────────────────
 
     private fun enforceDndProtection() {
         if (!_uiState.value.settings.protectDndMode) return
@@ -212,7 +209,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
-// ─── Phone ───────────────────────────────────────────────────────────────────
 
 data class PhoneUiState(
     val favoriteContacts: List<Contact> = emptyList(),
@@ -231,7 +227,6 @@ class PhoneViewModel(app: Application) : AndroidViewModel(app) {
     private var contactObserverRegistered = false
     private var callLogObserverRegistered = false
 
-    // ── observers ──────────────────────────────────────────────────────────
 
     private val contactObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
@@ -254,7 +249,6 @@ class PhoneViewModel(app: Application) : AndroidViewModel(app) {
         if (hasPermission(Manifest.permission.READ_CALL_LOG)) loadMissedCalls()
     }
 
-    // ── public api ─────────────────────────────────────────────────────────
 
     fun setPendingCallPhone(phone: String?) = _uiState.update { it.copy(pendingCallPhone = phone) }
 
@@ -355,7 +349,6 @@ class PhoneViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
-// ─── SMS ─────────────────────────────────────────────────────────────────────
 
 data class SmsUiState(
     val unreadSmsCount: Int = 0,
@@ -373,8 +366,6 @@ class SmsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _uiState = MutableStateFlow(SmsUiState())
     val uiState: StateFlow<SmsUiState> = _uiState.asStateFlow()
-
-    // ── observer ───────────────────────────────────────────────────────────
 
     private val smsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
@@ -394,8 +385,6 @@ class SmsViewModel(app: Application) : AndroidViewModel(app) {
             Uri.parse("content://sms"), true, smsObserver
         )
     }
-
-    // ── public api ─────────────────────────────────────────────────────────
 
     fun onEnterSmsList() {
         if (!SmsService.canModify(context)) setShowSmsDefaultDialog(true)
@@ -471,8 +460,6 @@ class SmsViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { context.contentResolver.unregisterContentObserver(smsObserver) }
     }
 }
-
-// ─── Media ───────────────────────────────────────────────────────────────────
 
 data class MediaUiState(
     val internalCameraMode: InternalCameraMode = InternalCameraMode.PHOTO

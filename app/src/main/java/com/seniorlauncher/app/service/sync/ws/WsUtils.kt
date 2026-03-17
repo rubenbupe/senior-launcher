@@ -1,4 +1,3 @@
-// service/sync/ws/WsUrlUtils.kt
 package com.seniorlauncher.app.service.sync.ws
 
 import android.util.Log

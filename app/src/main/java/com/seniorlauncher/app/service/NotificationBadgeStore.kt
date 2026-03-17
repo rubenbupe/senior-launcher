@@ -1,4 +1,3 @@
-// service/NotificationBadgeStore.kt
 package com.seniorlauncher.app.service
 
 import android.service.notification.StatusBarNotification

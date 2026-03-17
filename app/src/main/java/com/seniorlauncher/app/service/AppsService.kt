@@ -88,7 +88,6 @@ object AppsService {
             val activityInfo = resolveInfo.activityInfo ?: return@mapNotNull null
             val packageName = activityInfo.packageName
 
-            // Excluir la propia app
             if (packageName == context.packageName) return@mapNotNull null
 
             val label = resolveInfo.loadLabel(packageManager).toString()

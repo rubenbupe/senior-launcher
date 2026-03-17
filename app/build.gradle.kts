@@ -4,20 +4,44 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+val ciVersionCode = (project.findProperty("ciVersionCode") as String?)?.toIntOrNull()
+val ciVersionName = (project.findProperty("ciVersionName") as String?)
+val signingStoreFileProp = (project.findProperty("signingStoreFile") as String?)
+val signingStorePasswordProp = (project.findProperty("signingStorePassword") as String?)
+val signingKeyAliasProp = (project.findProperty("signingKeyAlias") as String?)
+val signingKeyPasswordProp = (project.findProperty("signingKeyPassword") as String?)
+
 android {
     namespace = "com.seniorlauncher.app"
     compileSdk = 36
+
+    signingConfigs {
+        if (
+            !signingStoreFileProp.isNullOrBlank() &&
+            !signingStorePasswordProp.isNullOrBlank() &&
+            !signingKeyAliasProp.isNullOrBlank() &&
+            !signingKeyPasswordProp.isNullOrBlank()
+        ) {
+            create("release") {
+                storeFile = file(signingStoreFileProp)
+                storePassword = signingStorePasswordProp
+                keyAlias = signingKeyAliasProp
+                keyPassword = signingKeyPasswordProp
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "com.seniorlauncher.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = ciVersionCode ?: 1
+        versionName = ciVersionName ?: "1.0"
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

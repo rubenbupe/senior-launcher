@@ -1,0 +1,92 @@
+name: Release Build
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref_name }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Resolve version values
+        id: version
+        run: |
+          RAW_TAG="${{ github.event.release.tag_name || github.ref_name }}"
+          VERSION_NAME="${RAW_TAG#v}"
+          VERSION_CODE="${{ github.run_number }}"
+
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          [[ -n "$ANDROID_KEYSTORE_BASE64" ]] || { echo "Missing secret: ANDROID_KEYSTORE_BASE64"; exit 1; }
+          [[ -n "$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_KEYSTORE_PASSWORD" ]] || { echo "Missing secret: ANDROID_KEYSTORE_PASSWORD"; exit 1; }
+          [[ -n "$ANDROID_KEY_ALIAS" ]] || { echo "Missing secret: ANDROID_KEY_ALIAS"; exit 1; }
+          [[ -n "$ANDROID_KEY_PASSWORD" ]] || { echo "Missing secret: ANDROID_KEY_PASSWORD"; exit 1; }
+
+      - name: Decode signing keystore
+        run: |
+          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release-keystore.jks"
+
+      - name: Verify keystore credentials
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          keytool -list \
+            -keystore "$RUNNER_TEMP/release-keystore.jks" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" >/dev/null
+
+      - name: Build release APK
+        env:
+          ORG_GRADLE_PROJECT_ciVersionName: ${{ steps.version.outputs.version_name }}
+          ORG_GRADLE_PROJECT_ciVersionCode: ${{ steps.version.outputs.version_code }}
+          ORG_GRADLE_PROJECT_signingStoreFile: ${{ runner.temp }}/release-keystore.jks
+          ORG_GRADLE_PROJECT_signingStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingKeyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_signingKeyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: >
+          gradle :app:assembleRelease
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/*.apk
+
+      - name: Upload APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          files: app/build/outputs/apk/release/*.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true
