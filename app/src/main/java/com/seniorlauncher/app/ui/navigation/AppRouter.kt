@@ -105,7 +105,6 @@ fun AppRouter(
     var pendingCallPhone by rememberSaveable { mutableStateOf<String?>(null) }
     var showPinDialog by rememberSaveable { mutableStateOf(false) }
 
-    // ── Permission launchers ────────────────────────────────────────────────
 
     val requestCallPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -142,7 +141,6 @@ fun AppRouter(
         ActivityResultContracts.StartActivityForResult()
     ) { /* SmsViewModel observer picks up changes automatically */ }
 
-    // ── Request startup permissions (first launch) ──────────────────────────
 
     LaunchedEffect(Unit) {
         val permissionsToRequest = listOf(
@@ -157,8 +155,6 @@ fun AppRouter(
         }
     }
 
-    // ── Reload installed apps list on resume ────────────────────────────────
-
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) settingsVm.reloadAvailableApps()
@@ -167,7 +163,6 @@ fun AppRouter(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // ── PIN dialog ──────────────────────────────────────────────────────────
 
     if (showPinDialog) {
         PinDialog(
