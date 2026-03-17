@@ -1,4 +1,4 @@
-name: Android Release Build
+name: Release Build
 
 on:
   release:
@@ -40,11 +40,31 @@ jobs:
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
 
+      - name: Validate signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          [[ -n "$ANDROID_KEYSTORE_BASE64" ]] || { echo "Missing secret: ANDROID_KEYSTORE_BASE64"; exit 1; }
+          [[ -n "$ANDROID_KEYSTORE_PASSWORD" ]] || { echo "Missing secret: ANDROID_KEYSTORE_PASSWORD"; exit 1; }
+          [[ -n "$ANDROID_KEY_ALIAS" ]] || { echo "Missing secret: ANDROID_KEY_ALIAS"; exit 1; }
+          [[ -n "$ANDROID_KEY_PASSWORD" ]] || { echo "Missing secret: ANDROID_KEY_PASSWORD"; exit 1; }
+
+      - name: Decode signing keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release-keystore.jks"
+
       - name: Build release APK
         run: >
           gradle :app:assembleRelease
           -PciVersionName=${{ steps.version.outputs.version_name }}
           -PciVersionCode=${{ steps.version.outputs.version_code }}
+          -PsigningStoreFile=${{ runner.temp }}/release-keystore.jks
+          -PsigningStorePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          -PsigningKeyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          -PsigningKeyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

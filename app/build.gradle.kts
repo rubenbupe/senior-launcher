@@ -6,10 +6,30 @@ plugins {
 
 val ciVersionCode = (project.findProperty("ciVersionCode") as String?)?.toIntOrNull()
 val ciVersionName = (project.findProperty("ciVersionName") as String?)
+val signingStoreFileProp = (project.findProperty("signingStoreFile") as String?)
+val signingStorePasswordProp = (project.findProperty("signingStorePassword") as String?)
+val signingKeyAliasProp = (project.findProperty("signingKeyAlias") as String?)
+val signingKeyPasswordProp = (project.findProperty("signingKeyPassword") as String?)
 
 android {
     namespace = "com.seniorlauncher.app"
     compileSdk = 36
+
+    signingConfigs {
+        if (
+            !signingStoreFileProp.isNullOrBlank() &&
+            !signingStorePasswordProp.isNullOrBlank() &&
+            !signingKeyAliasProp.isNullOrBlank() &&
+            !signingKeyPasswordProp.isNullOrBlank()
+        ) {
+            create("release") {
+                storeFile = file(signingStoreFileProp)
+                storePassword = signingStorePasswordProp
+                keyAlias = signingKeyAliasProp
+                keyPassword = signingKeyPasswordProp
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "com.seniorlauncher.app"
@@ -21,6 +41,7 @@ android {
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
