@@ -1,6 +1,9 @@
 package com.seniorlauncher.app.ui.screens.settings
 
+import android.app.NotificationManager
+import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -98,6 +101,20 @@ fun SettingsScreen(
     ) -> Unit
 ) {
     val context = LocalContext.current
+    val notificationManager = remember(context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            context.getSystemService(NotificationManager::class.java)
+        } else {
+            null
+        }
+    }
+    val hasDndPolicyAccess = remember(notificationManager) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            notificationManager?.isNotificationPolicyAccessGranted == true
+        } else {
+            true
+        }
+    }
     val appVersionLabel = remember(context) {
         runCatching {
             val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -430,6 +447,25 @@ fun SettingsScreen(
                             checked = protectDndMode,
                             onCheckedChange = { protectDndMode = it }
                         )
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && protectDndMode && !hasDndPolicyAccess) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "Conceder acceso a No molestar",
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(10.dp))
                         SettingsToggleRow(
                             title = "Bloquear volumen del dispositivo",
