@@ -11,7 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.FlashlightOff
+import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -77,7 +78,7 @@ fun FlashlightScreen(onBack: () -> Unit) {
         bottomBar = {
             AppBottomPrimaryButton(
                 text = if (isOn) "Apagar" else "Encender",
-                icon = Icons.Default.CameraAlt,
+                icon = if (isOn) Icons.Default.FlashlightOff else Icons.Default.FlashlightOn,
                 onClick = { toggleTorch(!isOn) }
             )
             AppBottomSecondaryButton(
