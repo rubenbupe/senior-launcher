@@ -3,13 +3,17 @@ package com.seniorlauncher.app.ui.screens.gallery
 import android.Manifest
 import android.content.ContentUris
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.Settings
+import android.util.Log
 import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -69,6 +73,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.core.net.toUri
 
 data class GalleryMediaItem(
     val id: Long,
@@ -109,6 +114,15 @@ fun GalleryScreen(
             }
             permissionLauncher.launch(permissions)
         }
+
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+						if (!Environment.isExternalStorageManager()) {
+								val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+										data = Uri.parse("package:${context.packageName}")
+								}
+								context.startActivity(intent)
+						}
+				}
     }
 
     LaunchedEffect(hasPermission, galleryVersion) {
