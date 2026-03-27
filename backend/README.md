@@ -2,6 +2,9 @@
 
 WebSocket + HTTP backend to sync Senior Launcher devices and execute remote actions from the web panel.
 
+## IMPORTANT NOTE
+This backend is not provided as a production-ready solution. It's a reference implementation to demonstrate the communication protocol and basic features. For production use, you should implement your own backend with proper security, scalability, and reliability considerations.
+
 ## What it does
 
 - Keeps a real-time connection with each device (`role=device`).
@@ -32,24 +35,26 @@ bun install
 bun run start
 ```
 
-Optional env vars:
+Required env vars:
 
 - `HOST` (default `0.0.0.0`)
 - `PORT` (default `8080`)
-- `BACKEND_API_TOKEN` (if set, protects HTTP and WS)
+- `DEVICE_TOKEN` (token para autenticación de dispositivos)
+- `ADMIN_TOKEN` (token para autenticación de panel/API)
+- `ALLOWED_ORIGIN` (origen permitido para panel, por ejemplo `https://panel.tudominio.com`)
 
 Example:
 
 ```bash
 cd backend
-BACKEND_API_TOKEN="my_token" bun run start
+DEVICE_TOKEN="device_secret" ADMIN_TOKEN="admin_secret" ALLOWED_ORIGIN="http://localhost:8080" bun run start
 ```
 
 ## Web panel
 
 1. Open `http://localhost:8080/`.
 2. Enter `Device ID` (same one configured in Android app).
-3. If token is enabled, fill `Token`.
+3. Fill `Token` with `ADMIN_TOKEN`.
 4. Click `Conectar WebSocket`.
 
 From the panel you can:
@@ -64,8 +69,13 @@ From the panel you can:
 
 Endpoints:
 
-- `ws://<host>:<port>/ws?role=device&deviceId=<id>&token=<optional>`
-- `ws://<host>:<port>/ws?role=web&deviceId=<id>&token=<optional>`
+- `ws://<host>:<port>/ws/device?deviceId=<id>` (auth por `Authorization: Bearer <DEVICE_TOKEN>` o ticket)
+- `ws://<host>:<port>/ws/admin?ticket=<one-time-ticket>`
+
+Tickets WS:
+
+- `POST /auth/ticket/admin` con header `Authorization: Bearer <ADMIN_TOKEN>` → `{ ticket }` (TTL 30s, un solo uso)
+- `POST /auth/ticket/device` con header `Authorization: Bearer <DEVICE_TOKEN>` y body `{ "deviceId": "..." }` → `{ ticket }`
 
 Messages from `device` to backend:
 
@@ -100,11 +110,10 @@ Messages from backend to `web`:
 - `POST /api/config/update`
 - `POST /api/action/run`
 
-If `BACKEND_API_TOKEN` is enabled, use either:
+Todos los endpoints HTTP protegidos (`/auth/*`, `/health`, `/api/*`) usan header:
 
-- Header: `Authorization: Bearer <token>`
-  or
-- Query param: `?token=<token>`
+- `Authorization: Bearer <ADMIN_TOKEN>` para panel/API admin
+- `Authorization: Bearer <DEVICE_TOKEN>` para `/auth/ticket/device`
 
 ## Docker
 

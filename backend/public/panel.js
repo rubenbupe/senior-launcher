@@ -85,12 +85,35 @@
     actionNameGroupEl.style.display = "none";
   }
 
-  function wsUrl() {
+  function wsUrl(ticket) {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${location.host}/ws/admin?ticket=${encodeURIComponent(ticket)}`;
+  }
+
+  async function requestAdminWsTicket() {
     const token = tokenInput.value.trim();
-    const deviceId = encodeURIComponent(deviceIdInput.value.trim());
-    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
-    return `${protocol}//${location.host}/ws?role=web&deviceId=${deviceId}${tokenParam}`;
+    if (!token) {
+      throw new Error("Token admin obligatorio");
+    }
+
+    const response = await fetch("/auth/ticket/admin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`No se pudo obtener ticket (${response.status})`);
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    const ticket = String(payload?.ticket || "").trim();
+    if (!ticket) {
+      throw new Error("Respuesta inválida al solicitar ticket");
+    }
+    return ticket;
   }
 
   function requireConnected() {
@@ -310,11 +333,20 @@
     }
   }
 
-  connectBtn.addEventListener("click", () => {
+  connectBtn.addEventListener("click", async () => {
     if (ws) ws.close();
 
-    const url = wsUrl();
-    addEvent(`Conectando a ${url}`);
+    let ticket = "";
+    try {
+      ticket = await requestAdminWsTicket();
+    } catch (error) {
+      addEvent(`Error solicitando ticket WS admin: ${String(error)}`);
+      setStatus("Error de autenticación", false);
+      return;
+    }
+
+    const url = wsUrl(ticket);
+    addEvent("Conectando WebSocket admin...");
 
     try {
       ws = new WebSocket(url);

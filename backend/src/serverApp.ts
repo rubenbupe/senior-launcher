@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { timingSafeEqual } from "node:crypto";
 import type { ServerWebSocket } from "bun";
 import {
   hasAnySetting,
@@ -21,19 +22,40 @@ import type {
 } from "./types";
 
 const PORT = Number(Bun.env.PORT ?? 8080);
-const HOST = Bun.env.HOST ?? "0.0.0.0";
-const API_TOKEN = (Bun.env.BACKEND_API_TOKEN ?? Bun.env.REMOTE_API_TOKEN ?? "").trim();
+const HOST = Bun.env.HOST ?? "127.0.0.1";
 const STORE_PATH = join(process.cwd(), "device-sync-store.json");
 
+function requireEnv(name: string): string {
+  const value = (Bun.env[name] ?? "").trim();
+  if (!value) {
+    console.error(`FATAL: Environment variable "${name}" is required and cannot be empty.`);
+    process.exit(1);
+  }
+  return value;
+}
+
+const DEVICE_TOKEN = requireEnv("DEVICE_TOKEN");
+const ADMIN_TOKEN = requireEnv("ADMIN_TOKEN");
+const ALLOWED_ORIGIN = requireEnv("ALLOWED_ORIGIN");
+
 const corsHeaders: HeadersInit = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  Vary: "Origin"
 };
 
 const deviceSockets = new Map<string, ServerWebSocket<WsData>>();
 const webSockets = new Set<ServerWebSocket<WsData>>();
 const store = new RuntimeStore(STORE_PATH);
+const wsTickets = new Map<string, { role: WsRole; deviceId?: string; expiresAt: number }>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ticket, entry] of wsTickets) {
+    if (now > entry.expiresAt) wsTickets.delete(ticket);
+  }
+}, 60_000);
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -81,13 +103,36 @@ function tokenFromRequest(request: Request): string {
   if (authHeader.startsWith("Bearer ")) {
     return authHeader.substring(7).trim();
   }
-  const url = new URL(request.url);
-  return (url.searchParams.get("token") ?? "").trim();
+  return "";
 }
 
-function isAuthorized(request: Request): boolean {
-  if (!API_TOKEN) return true;
-  return tokenFromRequest(request) === API_TOKEN;
+function isTokenValid(provided: string, expected: string): boolean {
+  if (!provided || provided.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+}
+
+function isOriginAllowed(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin || origin === "null") return true;
+  return origin === ALLOWED_ORIGIN;
+}
+
+function wsOriginRejected(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  return !!origin && origin !== "null" && origin !== ALLOWED_ORIGIN;
+}
+
+function createTicket(role: WsRole, deviceId?: string): string {
+  const ticket = crypto.randomUUID();
+  wsTickets.set(ticket, { role, deviceId, expiresAt: Date.now() + 30_000 });
+  return ticket;
+}
+
+function consumeTicket(ticket: string): { role: WsRole; deviceId?: string } | null {
+  const entry = wsTickets.get(ticket);
+  wsTickets.delete(ticket);
+  if (!entry || Date.now() > entry.expiresAt) return null;
+  return { role: entry.role, deviceId: entry.deviceId };
 }
 
 function sendWs(ws: ServerWebSocket<WsData>, payload: unknown) {
@@ -165,6 +210,7 @@ function staticResponse(filePath: URL, contentType: string): Response {
   const file = Bun.file(filePath);
   return new Response(file, {
     headers: {
+      ...corsHeaders,
       "Content-Type": contentType,
       "Cache-Control": "no-store"
     }
@@ -189,20 +235,60 @@ export function createBackendServer() {
       const url = new URL(request.url);
       const { pathname } = url;
 
-      if (request.method === "OPTIONS") return empty(204);
+      if (request.method === "OPTIONS") {
+        if (!isOriginAllowed(request)) return json({ error: "Origin not allowed" }, 403);
+        return empty(204);
+      }
 
-      if (pathname === "/ws") {
-        const role = (url.searchParams.get("role") ?? "").trim() as WsRole;
+      if (!isOriginAllowed(request)) return json({ error: "Origin not allowed" }, 403);
+
+      if (request.method === "POST" && pathname === "/auth/ticket/admin") {
+        if (!isTokenValid(tokenFromRequest(request), ADMIN_TOKEN)) return unauthorized();
+        return json({ ticket: createTicket("web") }, 201);
+      }
+
+      if (request.method === "POST" && pathname === "/auth/ticket/device") {
+        if (!isTokenValid(tokenFromRequest(request), DEVICE_TOKEN)) return unauthorized();
+        return parseJsonBody<{ deviceId?: string }>(request)
+          .then((body) => {
+            const deviceId = String(body.deviceId ?? "").trim();
+            if (!deviceId) return json({ error: "deviceId is required" }, 400);
+            return json({ ticket: createTicket("device", deviceId) }, 201);
+          })
+          .catch(() => json({ error: "Invalid request" }, 400));
+      }
+
+      if (pathname === "/ws/device") {
         const deviceId = (url.searchParams.get("deviceId") ?? "").trim();
+        const ticket = (url.searchParams.get("ticket") ?? "").trim();
+        const consumed = ticket ? consumeTicket(ticket) : null;
+        if (wsOriginRejected(request)) return json({ error: "Origin not allowed" }, 403);
 
-        if (!isAuthorized(request)) return unauthorized();
-        if ((role !== "device" && role !== "web") || (role === "device" && !deviceId)) {
-          return json({ error: "Parámetros WS inválidos" }, 400);
+        const hasValidTicket = consumed?.role === "device" && consumed.deviceId === deviceId;
+        const hasValidDeviceToken = isTokenValid(tokenFromRequest(request), DEVICE_TOKEN);
+
+        if (!hasValidTicket && !hasValidDeviceToken) return unauthorized();
+        if (!deviceId) {
+          return json({ error: "deviceId is required" }, 400);
         }
 
-        const upgraded = serverInstance.upgrade(request, { data: { role, deviceId: deviceId || undefined } });
+        const upgraded = serverInstance.upgrade(request, { data: { role: "device", deviceId } });
         if (upgraded) return;
-        return json({ error: "No se pudo abrir websocket" }, 400);
+        return json({ error: "WebSocket upgrade failed" }, 400);
+      }
+
+      if (pathname === "/ws/admin") {
+        const ticket = (url.searchParams.get("ticket") ?? "").trim();
+        const consumed = ticket ? consumeTicket(ticket) : null;
+        if (wsOriginRejected(request)) return json({ error: "Origin not allowed" }, 403);
+
+        if (consumed?.role !== "web") {
+          return unauthorized();
+        }
+
+        const upgraded = serverInstance.upgrade(request, { data: { role: "web" } });
+        if (upgraded) return;
+        return json({ error: "WebSocket upgrade failed" }, 400);
       }
 
       if (request.method === "GET" && pathname === "/") {
@@ -212,7 +298,7 @@ export function createBackendServer() {
         return staticResponse(panelJsUrl, "application/javascript; charset=utf-8");
       }
 
-      if (!isAuthorized(request)) return unauthorized();
+      if (!isTokenValid(tokenFromRequest(request), ADMIN_TOKEN)) return unauthorized();
 
       if (request.method === "GET" && pathname === "/health") {
         return json({ ok: true, time: nowIso() });
@@ -234,36 +320,38 @@ export function createBackendServer() {
           .then((body) => {
             const deviceId = String(body.deviceId ?? "").trim();
             const settings = parseSettingsPatch(body.settings);
-            if (!deviceId) return json({ error: "deviceId es obligatorio" }, 400);
-            if (!hasAnySetting(settings)) return json({ error: "settings vacío" }, 400);
+            if (!deviceId) return json({ error: "deviceId is required" }, 400);
+            if (!hasAnySetting(settings)) return json({ error: "settings is empty" }, 400);
             if (!store.hasPersistedConfig(deviceId)) {
-              return json({ error: "El device aún no ha persistido su configuración" }, 409);
+              return json({ error: "The device has not persisted its configuration yet" }, 409);
             }
             const command = queueOrSendConfig(deviceId, settings);
             if (!command) {
-              return json({ status: "noop", message: "Sin cambios de configuración" }, 200);
+              return json({ status: "noop", message: "No configuration changes detected" }, 200);
             }
             return json(command, 201);
           })
-          .catch(() => json({ error: "Petición inválida" }, 400));
+          .catch(() => json({ error: "Invalid request" }, 400));
       }
 
       if (request.method === "POST" && pathname === "/api/action/run") {
         return parseJsonBody<{ deviceId?: string; action?: DeviceAction }>(request)
           .then((body) => {
             const deviceId = String(body.deviceId ?? "").trim();
-            if (!deviceId) return json({ error: "deviceId es obligatorio" }, 400);
+            if (!deviceId) return json({ error: "deviceId is required" }, 400);
             const action = parseAction(body.action);
-            if (!action) return json({ error: "action inválida" }, 400);
+            if (!action) return json({ error: "invalid action" }, 400);
             const command = queueOrSendAction(deviceId, action);
             return json(command, 201);
           })
-          .catch(() => json({ error: "Petición inválida" }, 400));
+          .catch(() => json({ error: "Invalid request" }, 400));
       }
 
       return json({ error: "Not found" }, 404);
     },
     websocket: {
+      maxPayloadLength: 1024 * 512,
+      idleTimeout: 120,
       open(ws) {
         const { role, deviceId } = ws.data;
 
@@ -349,7 +437,7 @@ export function createBackendServer() {
           const type = String(payload?.type ?? "").trim();
           const deviceId = String(payload?.deviceId ?? ws.data.deviceId ?? "").trim();
           if (!deviceId) {
-            sendWs(ws, { type: "error", message: "deviceId es obligatorio" });
+            sendWs(ws, { type: "error", message: "deviceId is required" });
             return;
           }
 
@@ -362,16 +450,16 @@ export function createBackendServer() {
           if (type === "setConfig") {
             const settings = parseSettingsPatch(payload.settings);
             if (!hasAnySetting(settings)) {
-              sendWs(ws, { type: "error", message: "settings vacío" });
+              sendWs(ws, { type: "error", message: "settings is empty" });
               return;
             }
             if (!store.hasPersistedConfig(deviceId)) {
-              sendWs(ws, { type: "error", message: "El device aún no ha persistido su configuración" });
+              sendWs(ws, { type: "error", message: "The device has not persisted its configuration yet" });
               return;
             }
             const command = queueOrSendConfig(deviceId, settings);
             if (!command) {
-              sendWs(ws, { type: "noop", message: "Sin cambios de configuración", deviceId });
+              sendWs(ws, { type: "noop", message: "No configuration changes detected", deviceId });
               return;
             }
             sendWs(ws, { type: "accepted", command });
@@ -381,7 +469,7 @@ export function createBackendServer() {
           if (type === "runAction") {
             const action = parseAction(payload.action);
             if (!action) {
-              sendWs(ws, { type: "error", message: "action inválida" });
+              sendWs(ws, { type: "error", message: "invalid action" });
               return;
             }
             const command = queueOrSendAction(deviceId, action);
@@ -392,12 +480,12 @@ export function createBackendServer() {
           if (type === "requestData") {
             const dataType = String(payload?.dataType ?? "").trim();
             if (dataType !== "sms") {
-              sendWs(ws, { type: "error", message: "dataType inválido" });
+              sendWs(ws, { type: "error", message: "invalid dataType" });
               return;
             }
             const deviceSocket = deviceSockets.get(deviceId);
             if (!deviceSocket) {
-              sendWs(ws, { type: "error", message: "El device no está conectado" });
+              sendWs(ws, { type: "error", message: "The device is not connected" });
               return;
             }
             const requestId = crypto.randomUUID();
@@ -428,7 +516,7 @@ export function createBackendServer() {
 
   logInfo("Backend started", {
     url: server.url.toString(),
-    tokenEnabled: API_TOKEN.length > 0,
+    ticketTtlMs: 30_000,
     storePath: STORE_PATH
   });
 
