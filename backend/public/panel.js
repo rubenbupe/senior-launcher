@@ -100,7 +100,7 @@
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-app-token": `Bearer ${token}`
+        "x-app-token": `${token}`
       }
     });
 

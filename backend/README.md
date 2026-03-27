@@ -74,8 +74,8 @@ Endpoints:
 
 WebSocket tickets:
 
-- `POST /auth/ticket/admin` with header `Authorization: Bearer <ADMIN_TOKEN>` → `{ ticket }` (TTL 30s, single-use, IP-bound)
-- `POST /auth/ticket/device` with header `Authorization: Bearer <DEVICE_TOKEN>` and body `{ "deviceId": "..." }` → `{ ticket }` (TTL 30s, single-use, IP-bound)
+- `POST /auth/ticket/admin` with header `Authorization: <ADMIN_TOKEN>` → `{ ticket }` (TTL 30s, single-use, IP-bound)
+- `POST /auth/ticket/device` with header `Authorization: <DEVICE_TOKEN>` and body `{ "deviceId": "..." }` → `{ ticket }` (TTL 30s, single-use, IP-bound)
 
 Messages from `device` to backend:
 
@@ -112,8 +112,8 @@ Messages from backend to `web`:
 
 All protected HTTP endpoints (`/auth/*`, `/health`, `/api/*`) require:
 
-- `x-app-token: Bearer <ADMIN_TOKEN>` for admin panel/API
-- `x-app-token: Bearer <DEVICE_TOKEN>` for `/auth/ticket/device`
+- `x-app-token: <ADMIN_TOKEN>` for admin panel/API
+- `x-app-token: <DEVICE_TOKEN>` for `/auth/ticket/device`
 
 ## Docker
 

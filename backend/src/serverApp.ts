@@ -101,10 +101,7 @@ function unauthorized(): Response {
 
 function tokenFromRequest(request: Request): string {
 	const authHeader = request.headers.get("x-app-token") ?? "";
-	if (authHeader.startsWith("Bearer ")) {
-		return authHeader.substring(7).trim();
-	}
-	return "";
+	return authHeader.trim();
 }
 
 function isTokenValid(provided: string, expected: string): boolean {
