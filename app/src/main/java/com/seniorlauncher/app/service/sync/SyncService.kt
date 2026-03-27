@@ -21,9 +21,14 @@ import com.seniorlauncher.app.service.sync.ws.WsClient
 import com.seniorlauncher.app.service.sync.ws.WsConfig
 import com.seniorlauncher.app.service.sync.ws.toWebSocketBaseUrl
 import kotlinx.coroutines.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.WebSocket
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 
 class SyncService : Service() {
 
@@ -78,6 +83,10 @@ class SyncService : Service() {
     private lateinit var wsClient: WsClient
     private lateinit var protocol: SyncProtocol
     private lateinit var prefs: AppPreferencesRepository
+    private val httpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
 
     override fun onCreate() {
         super.onCreate()
@@ -180,14 +189,24 @@ class SyncService : Service() {
                 if (!prefs.getSyncEnabled() || prefs.getServerUrl().isBlank() || prefs.getDeviceId().isBlank()) {
                     return@launchConnectionLoop null
                 }
+                val apiToken = prefs.getApiToken().trim()
+                if (apiToken.isBlank()) {
+                    Log.e(TAG, "Missing API token for sync")
+                    return@launchConnectionLoop null
+                }
                 val wsBaseUrl = toWebSocketBaseUrl(prefs.getServerUrl()) ?: run {
                     Log.e(TAG, "Invalid URL: ${prefs.getServerUrl()}")
                     return@launchConnectionLoop null
                 }
+                val ticket = requestDeviceWsTicket(
+                    wsBaseUrl = wsBaseUrl,
+                    deviceId = prefs.getDeviceId(),
+                    apiToken = apiToken
+                ) ?: return@launchConnectionLoop null
                 val encodedId = URLEncoder.encode(prefs.getDeviceId(), Charsets.UTF_8.name())
                 WsConfig(
-                    url = "$wsBaseUrl/ws?role=device&deviceId=$encodedId",
-                    bearerToken = prefs.getApiToken()
+                    url = "$wsBaseUrl/ws/device?deviceId=$encodedId&ticket=${URLEncoder.encode(ticket, Charsets.UTF_8.name())}",
+                    bearerToken = ""
                 )
             }
         }
@@ -212,6 +231,48 @@ class SyncService : Service() {
             ws.send(payload)
             Log.d(TAG, "Device state sent")
         }.onFailure { Log.e(TAG, "Error sending device state", it) }
+    }
+
+    private suspend fun requestDeviceWsTicket(
+        wsBaseUrl: String,
+        deviceId: String,
+        apiToken: String
+    ): String? = withContext(Dispatchers.IO) {
+        val httpBaseUrl = when {
+            wsBaseUrl.startsWith("wss://") -> "https://${wsBaseUrl.removePrefix("wss://")}"
+            wsBaseUrl.startsWith("ws://") -> "http://${wsBaseUrl.removePrefix("ws://")}"
+            else -> return@withContext null
+        }
+
+        val body = JSONObject().apply {
+            put("deviceId", deviceId)
+        }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+
+        val request = Request.Builder()
+            .url("$httpBaseUrl/auth/ticket/device")
+            .addHeader("x-app-token", "$apiToken")
+            .post(body)
+            .build()
+
+        runCatching {
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Ticket request failed: HTTP ${response.code}")
+                    return@use null
+                }
+                val responseBody = response.body?.string().orEmpty()
+                val ticket = runCatching { JSONObject(responseBody).optString("ticket", "") }
+                    .getOrDefault("")
+                    .trim()
+                if (ticket.isBlank()) {
+                    Log.e(TAG, "Ticket response missing ticket")
+                    return@use null
+                }
+                ticket
+            }
+        }.onFailure {
+            Log.e(TAG, "Ticket request error", it)
+        }.getOrNull()
     }
 
     private fun sendCommandResult(ws: WebSocket, commandId: String, success: Boolean, message: String) {

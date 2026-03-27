@@ -29,7 +29,7 @@ class WsClient(
         .retryOnConnectionFailure(true)
         .build()
 
-    fun launchConnectionLoop(wsConfigProvider: () -> WsConfig?) {
+    fun launchConnectionLoop(wsConfigProvider: suspend () -> WsConfig?) {
         if (connectJob?.isActive == true) return
         connectJob = scope.launch {
             while (isActive) {
@@ -64,7 +64,7 @@ class WsClient(
             .url(cfg.url)
             .apply {
                 if (cfg.bearerToken.isNotBlank())
-                    addHeader("Authorization", "Bearer ${cfg.bearerToken}")
+                    addHeader("x-app-token", "${cfg.bearerToken}")
             }
             .build()
 

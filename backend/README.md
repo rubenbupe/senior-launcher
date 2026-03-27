@@ -74,8 +74,8 @@ Endpoints:
 
 WebSocket tickets:
 
-- `POST /auth/ticket/admin` with header `Authorization: <ADMIN_TOKEN>` → `{ ticket }` (TTL 30s, single-use, IP-bound)
-- `POST /auth/ticket/device` with header `Authorization: <DEVICE_TOKEN>` and body `{ "deviceId": "..." }` → `{ ticket }` (TTL 30s, single-use, IP-bound)
+- `POST /auth/ticket/admin` with header `x-app-token: <ADMIN_TOKEN>` → `{ ticket }` (TTL 30s, single-use, IP-bound)
+- `POST /auth/ticket/device` with header `x-app-token: <DEVICE_TOKEN>` and body `{ "deviceId": "..." }` → `{ ticket }` (TTL 30s, single-use, IP-bound)
 
 Messages from `device` to backend:
 
