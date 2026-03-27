@@ -69,13 +69,13 @@ From the panel you can:
 
 Endpoints:
 
-- `ws://<host>:<port>/ws/device?deviceId=<id>` (auth por `Authorization: Bearer <DEVICE_TOKEN>` o ticket)
+- `ws://<host>:<port>/ws/device?deviceId=<id>&ticket=<one-time-ticket>`
 - `ws://<host>:<port>/ws/admin?ticket=<one-time-ticket>`
 
-Tickets WS:
+WebSocket tickets:
 
-- `POST /auth/ticket/admin` con header `Authorization: Bearer <ADMIN_TOKEN>` → `{ ticket }` (TTL 30s, un solo uso)
-- `POST /auth/ticket/device` con header `Authorization: Bearer <DEVICE_TOKEN>` y body `{ "deviceId": "..." }` → `{ ticket }`
+- `POST /auth/ticket/admin` with header `Authorization: Bearer <ADMIN_TOKEN>` → `{ ticket }` (TTL 30s, single-use, IP-bound)
+- `POST /auth/ticket/device` with header `Authorization: Bearer <DEVICE_TOKEN>` and body `{ "deviceId": "..." }` → `{ ticket }` (TTL 30s, single-use, IP-bound)
 
 Messages from `device` to backend:
 
@@ -110,10 +110,10 @@ Messages from backend to `web`:
 - `POST /api/config/update`
 - `POST /api/action/run`
 
-Todos los endpoints HTTP protegidos (`/auth/*`, `/health`, `/api/*`) usan header:
+All protected HTTP endpoints (`/auth/*`, `/health`, `/api/*`) require:
 
-- `Authorization: Bearer <ADMIN_TOKEN>` para panel/API admin
-- `Authorization: Bearer <DEVICE_TOKEN>` para `/auth/ticket/device`
+- `x-app-token: Bearer <ADMIN_TOKEN>` for admin panel/API
+- `x-app-token: Bearer <DEVICE_TOKEN>` for `/auth/ticket/device`
 
 ## Docker
 
