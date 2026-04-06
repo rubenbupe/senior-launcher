@@ -52,9 +52,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,6 +66,7 @@ import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
 import coil.request.videoFrameMillis
+import coil.size.Precision
 import com.seniorlauncher.app.ui.components.AppBottomPrimaryButton
 import com.seniorlauncher.app.ui.components.AppBottomSecondaryButton
 import com.seniorlauncher.app.ui.components.AppSubScreen
@@ -81,6 +84,8 @@ data class GalleryMediaItem(
     val isVideo: Boolean,
     val dateTakenMillis: Long
 )
+
+private val GALLERY_TILE_HEIGHT = 190.dp
 
 @Composable
 fun GalleryScreen(
@@ -211,62 +216,10 @@ fun GalleryScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom)
                         ) {
                             items(mediaItems, key = { "${it.id}_${it.isVideo}" }) { item ->
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(190.dp)
-                                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                                        .background(Color(0xFFEFEFEF))
-                                        .clickable { onItemSelected(item) }
-                                ) {
-                                    AsyncImage(
-                                        model = if (item.isVideo) {
-                                            ImageRequest.Builder(context)
-                                                .data(item.uri)
-                                                .decoderFactory(VideoFrameDecoder.Factory())
-                                                .videoFrameMillis(1_000)
-                                                .crossfade(false)
-                                                .build()
-                                        } else {
-                                            item.uri
-                                        },
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-
-                                    if (item.isVideo) {
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.Center)
-                                                .background(
-                                                    Color.Black.copy(alpha = 0.55f),
-                                                    CircleShape
-                                                )
-                                                .padding(10.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.PlayArrow,
-                                                contentDescription = null,
-                                                tint = Color.White
-                                            )
-                                        }
-                                    }
-
-                                    Text(
-                                        text = formatTimelineDate(item.dateTakenMillis),
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        modifier = Modifier
-                                            .align(Alignment.BottomStart)
-                                            .background(
-                                                color = Color.Black.copy(alpha = 0.55f),
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .padding(horizontal = 2.dp, vertical = 2.dp)
-                                    )
-                                }
+                                GalleryGridItem(
+                                    item = item,
+                                    onClick = { onItemSelected(item) }
+                                )
                             }
                         }
                     }
@@ -281,6 +234,82 @@ fun GalleryScreen(
             )
         }
     )
+}
+
+@Composable
+private fun GalleryGridItem(
+    item: GalleryMediaItem,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val tileSizePx = with(density) { GALLERY_TILE_HEIGHT.roundToPx() }
+    val model = remember(item.uri, item.isVideo, tileSizePx) {
+        val builder = ImageRequest.Builder(context)
+            .data(item.uri)
+            .size(tileSizePx, tileSizePx)
+            .precision(Precision.INEXACT)
+            .crossfade(false)
+            .allowHardware(true)
+
+        if (item.isVideo) {
+            builder
+                .decoderFactory(VideoFrameDecoder.Factory())
+                .videoFrameMillis(1_000)
+        }
+
+        builder.build()
+    }
+    val dateText = remember(item.dateTakenMillis) { formatTimelineDate(item.dateTakenMillis) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(GALLERY_TILE_HEIGHT)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFFEFEFEF))
+            .clickable(onClick = onClick)
+    ) {
+        AsyncImage(
+            model = model,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            filterQuality = FilterQuality.Low
+        )
+
+        if (item.isVideo) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(
+                        Color.Black.copy(alpha = 0.55f),
+                        CircleShape
+                    )
+                    .padding(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White
+                )
+            }
+        }
+
+        Text(
+            text = dateText,
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .background(
+                    color = Color.Black.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 2.dp, vertical = 2.dp)
+        )
+    }
 }
 
 @Composable

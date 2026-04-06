@@ -12,6 +12,12 @@ import androidx.core.net.toUri
 
 object ContactsRepository {
 
+    private data class ContactSeed(
+        val id: Long,
+        val name: String,
+        val photoUri: Uri?
+    )
+
     fun setFavorite(context: Context, contactId: Long, favorite: Boolean): Boolean {
         if (contactId <= 0L) return false
         val values = ContentValues().apply {
@@ -37,36 +43,16 @@ object ContactsRepository {
     }
 
     fun loadAll(context: Context): List<Contact> {
-        val contactMap = mutableMapOf<Long, Pair<String, Uri?>>()
-        val projection = arrayOf(
-            ContactsContract.Contacts._ID,
-            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
-            ContactsContract.Contacts.PHOTO_URI
-        )
-        context.contentResolver.query(
-            ContactsContract.Contacts.CONTENT_URI,
-            projection, null, null,
-            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
-        )?.use { cursor ->
-            val idIdx = cursor.getColumnIndex(ContactsContract.Contacts._ID)
-            val nameIdx = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY)
-            val photoIdx = cursor.getColumnIndex(ContactsContract.Contacts.PHOTO_URI)
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(idIdx)
-                val name = cursor.getString(nameIdx) ?: continue
-                if (name.isBlank()) continue
-                val photoUri = cursor.getString(photoIdx)?.toUri()
-                contactMap[id] = name to photoUri
-            }
-        }
-        val phoneMap = loadPhoneMap(context, contactMap.keys)
-        return contactMap.map { (id, pair) ->
-            Contact(id, pair.first, pair.second, phoneMap[id])
-        }
+        return loadAllAndFavorites(context).second
     }
 
     fun loadFavorites(context: Context): List<Contact> {
-        val contactMap = mutableMapOf<Long, Pair<String, Uri?>>()
+        return loadAllAndFavorites(context).first
+    }
+
+    fun loadAllAndFavorites(context: Context): Pair<List<Contact>, List<Contact>> {
+        val seeds = ArrayList<ContactSeed>()
+        val favoriteIds = mutableSetOf<Long>()
         val projection = arrayOf(
             ContactsContract.Contacts._ID,
             ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
@@ -76,25 +62,30 @@ object ContactsRepository {
         context.contentResolver.query(
             ContactsContract.Contacts.CONTENT_URI,
             projection,
-            "${ContactsContract.Contacts.STARRED} = 1",
+            null,
             null,
             ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
         )?.use { cursor ->
             val idIdx = cursor.getColumnIndex(ContactsContract.Contacts._ID)
             val nameIdx = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY)
             val photoIdx = cursor.getColumnIndex(ContactsContract.Contacts.PHOTO_URI)
+            val starredIdx = cursor.getColumnIndex(ContactsContract.Contacts.STARRED)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idIdx)
                 val name = cursor.getString(nameIdx) ?: continue
                 if (name.isBlank()) continue
                 val photoUri = cursor.getString(photoIdx)?.toUri()
-                contactMap[id] = name to photoUri
+                seeds.add(ContactSeed(id = id, name = name, photoUri = photoUri))
+                if (cursor.getInt(starredIdx) == 1) favoriteIds.add(id)
             }
         }
-        val phoneMap = loadPhoneMap(context, contactMap.keys)
-        return contactMap.map { (id, pair) ->
-            Contact(id, pair.first, pair.second, phoneMap[id])
+
+        val phoneMap = loadPhoneMap(context, seeds.asSequence().map { it.id }.toSet())
+        val all = seeds.map { seed ->
+            Contact(seed.id, seed.name, seed.photoUri, phoneMap[seed.id])
         }
+        val favorites = all.filter { it.id in favoriteIds }
+        return favorites to all
     }
 
     fun loadMissedCallsByContact(

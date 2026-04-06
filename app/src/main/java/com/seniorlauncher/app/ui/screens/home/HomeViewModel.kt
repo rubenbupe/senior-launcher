@@ -33,6 +33,7 @@ import com.seniorlauncher.app.service.sync.SyncService
 import com.seniorlauncher.app.ui.screens.camera.InternalCameraMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -226,19 +227,37 @@ class PhoneViewModel(app: Application) : AndroidViewModel(app) {
 
     private var contactObserverRegistered = false
     private var callLogObserverRegistered = false
+    private var pendingContactsReloadJob: Job? = null
+    private var pendingMissedCallsReloadJob: Job? = null
 
 
     private val contactObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
             if (!hasPermission(Manifest.permission.READ_CONTACTS)) return
-            viewModelScope.launch { loadContacts() }
+            scheduleContactsReload()
         }
     }
 
     private val callLogObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
             if (!hasPermission(Manifest.permission.READ_CALL_LOG)) return
-            viewModelScope.launch { loadMissedCalls() }
+            scheduleMissedCallsReload()
+        }
+    }
+
+    private fun scheduleContactsReload() {
+        pendingContactsReloadJob?.cancel()
+        pendingContactsReloadJob = viewModelScope.launch {
+            delay(250)
+            loadContacts()
+        }
+    }
+
+    private fun scheduleMissedCallsReload() {
+        pendingMissedCallsReloadJob?.cancel()
+        pendingMissedCallsReloadJob = viewModelScope.launch {
+            delay(250)
+            loadMissedCalls()
         }
     }
 
@@ -256,8 +275,9 @@ class PhoneViewModel(app: Application) : AndroidViewModel(app) {
         if (!hasPermission(Manifest.permission.READ_CONTACTS)) return
         ensureContactObserverRegistered()
         viewModelScope.launch {
-            val favs = withContext(Dispatchers.IO) { ContactsRepository.loadFavorites(context) }
-            val all = withContext(Dispatchers.IO) { ContactsRepository.loadAll(context) }
+            val (favs, all) = withContext(Dispatchers.IO) {
+                ContactsRepository.loadAllAndFavorites(context)
+            }
             _uiState.update { it.copy(favoriteContacts = favs, allContacts = all) }
             loadMissedCalls()
         }
@@ -340,6 +360,8 @@ class PhoneViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         super.onCleared()
+        pendingContactsReloadJob?.cancel()
+        pendingMissedCallsReloadJob?.cancel()
         if (contactObserverRegistered) {
             runCatching { context.contentResolver.unregisterContentObserver(contactObserver) }
         }

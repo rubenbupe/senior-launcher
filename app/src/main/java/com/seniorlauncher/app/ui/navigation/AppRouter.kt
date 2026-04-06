@@ -65,7 +65,6 @@ import com.seniorlauncher.app.ui.screens.home.SmsViewModel
 import com.seniorlauncher.app.ui.screens.phone.ContactDetailScreen
 import com.seniorlauncher.app.ui.screens.phone.ContactListScreen
 import com.seniorlauncher.app.ui.screens.phone.DialerScreen
-import com.seniorlauncher.app.ui.screens.phone.PhoneHomeScreen
 import com.seniorlauncher.app.ui.screens.settings.AllowedAppsSettingsScreen
 import com.seniorlauncher.app.ui.screens.settings.SettingsScreen
 import com.seniorlauncher.app.ui.screens.sms.SmsListScreen
@@ -74,7 +73,6 @@ import kotlinx.serialization.Serializable
 
 @Serializable object HomeRoute
 @Serializable object PhoneHomeRoute
-@Serializable object ContactListRoute
 @Serializable data class ContactDetailRoute(val contactId: Long)
 @Serializable object SettingsRoute
 @Serializable object AllowedAppsRoute
@@ -302,33 +300,16 @@ private fun HomeNavGraph(
             val phoneVm: PhoneViewModel = viewModel()
             val phoneState by phoneVm.uiState.collectAsState()
 
-            PhoneHomeScreen(
-                favoriteContacts = phoneState.favoriteContacts,
-                missedCallsByContactId = phoneState.missedCallsByContactId,
-                onBack = { navController.popBackStack() },
-                onFavoriteContactClick = { contact ->
-                    navController.navigate(ContactDetailRoute(contact.id))
-                },
-                onContactClick = { contact ->
-                    navController.navigate(ContactDetailRoute(contact.id))
-                },
-                onAllContactsClick = { navController.navigate(ContactListRoute) },
-                onDialerClick = {
-                    navController.navigate(DialerRoute())
-                }
-            )
-        }
-
-        composable<ContactListRoute> {
-            val phoneVm: PhoneViewModel = viewModel()
-            val phoneState by phoneVm.uiState.collectAsState()
-
             ContactListScreen(
                 onBack = { navController.popBackStack() },
                 onContactClick = { contact ->
                     navController.navigate(ContactDetailRoute(contact.id))
                 },
-                allContacts = phoneState.allContacts
+                onDialerClick = {
+                    navController.navigate(DialerRoute())
+                },
+                allContacts = phoneState.allContacts,
+                favoriteContactIds = phoneState.favoriteContacts.map { it.id }.toSet()
             )
         }
 

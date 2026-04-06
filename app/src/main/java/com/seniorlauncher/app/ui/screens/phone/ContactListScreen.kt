@@ -1,21 +1,8 @@
 package com.seniorlauncher.app.ui.screens.phone
 
-import android.Manifest
-import android.R
-import android.content.ContentProviderOperation
 import android.content.Context
-import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.ContactsContract
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import coil.compose.AsyncImage
-import coil.request.CachePolicy
-import coil.request.ImageRequest
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -36,15 +23,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,21 +40,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.seniorlauncher.app.data.model.Contact
 import com.seniorlauncher.app.ui.components.AppBottomPrimaryButton
 import com.seniorlauncher.app.ui.components.AppBottomSecondaryButton
@@ -80,18 +65,21 @@ import com.seniorlauncher.app.ui.theme.HeaderColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
+import java.text.Normalizer
+import java.util.Locale
 
 private val HEADER_HEIGHT = 40.dp
 private val ROW_HEIGHT = 72.dp
-
-private data class NewContactInput(
-    val name: String,
-    val phone: String,
-    val photoBytes: ByteArray?
-)
+private const val FAVORITES_SYMBOL = "★"
+private val DIACRITICS_REGEX = "\\p{Mn}+".toRegex()
+private val SIDEBAR_SYMBOLS = buildList {
+    add(FAVORITES_SYMBOL)
+    addAll(('A'..'Z').map { it.toString() })
+    add("#")
+}
 
 private sealed class ContactListItem {
+    data object FavoritesHeader : ContactListItem()
     data class Header(val letter: String) : ContactListItem()
     data class ContactRow(val contact: Contact) : ContactListItem()
 }
@@ -100,7 +88,9 @@ private sealed class ContactListItem {
 fun ContactListScreen(
     onBack: () -> Unit,
     onContactClick: (Contact) -> Unit,
-    allContacts: List<Contact>
+    onDialerClick: () -> Unit,
+    allContacts: List<Contact>,
+    favoriteContactIds: Set<Long>
 ) {
     val context = LocalContext.current
     val listState = rememberLazyListState()
@@ -108,79 +98,22 @@ fun ContactListScreen(
 
     var flatList by remember { mutableStateOf<List<ContactListItem>>(emptyList()) }
     var letterIndex by remember { mutableStateOf<LinkedHashMap<String, Int>>(LinkedHashMap()) }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var newName by remember { mutableStateOf("") }
-    var newPhone by remember { mutableStateOf("") }
-    var phoneHasError by remember { mutableStateOf(false) }
-    var selectedPhotoUri by remember { mutableStateOf<Uri?>(null) }
-    var selectedPhotoBytes by remember { mutableStateOf<ByteArray?>(null) }
-    var isSavingContact by remember { mutableStateOf(false) }
-    var pendingContactData by remember { mutableStateOf<NewContactInput?>(null) }
 
-    val photoPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        selectedPhotoUri = uri
-        scope.launch {
-            selectedPhotoBytes = withContext(Dispatchers.IO) {
-                readAndCompressPhoto(context, uri)
-            }
-        }
-    }
-
-    fun resetAddDialogState() {
-        newName = ""
-        newPhone = ""
-        phoneHasError = false
-        selectedPhotoUri = null
-        selectedPhotoBytes = null
-        pendingContactData = null
-        isSavingContact = false
-    }
-
-    fun saveContact(input: NewContactInput) {
-        scope.launch {
-            isSavingContact = true
-            val success = withContext(Dispatchers.IO) {
-                insertContactSync(context, input.name, input.phone, input.photoBytes)
-            }
-            isSavingContact = false
-            if (success) {
-                Toast.makeText(context, "Contacto añadido", Toast.LENGTH_SHORT).show()
-                showAddDialog = false
-                resetAddDialogState()
-            } else {
-                Toast.makeText(context, "No se pudo añadir el contacto", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    val requestWriteContacts = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        val input = pendingContactData
-        pendingContactData = null
-        if (granted && input != null) {
-            saveContact(input)
-        } else if (!granted) {
-            Toast.makeText(context, "Permiso de contactos denegado", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    LaunchedEffect(allContacts) {
+    LaunchedEffect(allContacts, favoriteContactIds) {
         if (allContacts.isEmpty()) {
             flatList = emptyList()
             letterIndex = LinkedHashMap()
             return@LaunchedEffect
         }
-        val flat = withContext(Dispatchers.Default) { buildFlatList(allContacts) }
+        val flat = withContext(Dispatchers.Default) {
+            buildFlatList(allContacts, favoriteContactIds)
+        }
         val index = withContext(Dispatchers.Default) { buildLetterIndex(flat) }
         flatList = flat
         letterIndex = index
     }
 
-    val letters = remember(letterIndex) { letterIndex.keys.toList() }
+    val letters = remember { SIDEBAR_SYMBOLS }
     val isLoading = allContacts.isNotEmpty() && flatList.isEmpty()
 
     AppSubScreen(
@@ -205,18 +138,21 @@ fun ContactListScreen(
                             items = flatList,
                             key = { item ->
                                 when (item) {
+                                    is ContactListItem.FavoritesHeader -> "h_fav"
                                     is ContactListItem.Header -> "h_${item.letter}"
-                                    is ContactListItem.ContactRow -> "c_${item.contact.id}"
+                                    is ContactListItem.ContactRow -> item.contact.id
                                 }
                             },
                             contentType = { item ->
                                 when (item) {
-                                    is ContactListItem.Header -> 0
-                                    is ContactListItem.ContactRow -> 1
+                                    is ContactListItem.FavoritesHeader -> 0
+                                    is ContactListItem.Header -> 1
+                                    is ContactListItem.ContactRow -> 2
                                 }
                             }
                         ) { item ->
                             when (item) {
+                                is ContactListItem.FavoritesHeader -> FavoritesSectionHeader()
                                 is ContactListItem.Header -> SectionHeader(item.letter)
                                 is ContactListItem.ContactRow -> ContactRow(
                                     contact = item.contact,
@@ -231,7 +167,8 @@ fun ContactListScreen(
                     AlphabetStrip(
                         letters = letters,
                         onLetterSelected = { letter ->
-                            val idx = letterIndex[letter] ?: return@AlphabetStrip
+                            val idx = findNextIndexForSymbol(letter, letters, letterIndex)
+                                ?: return@AlphabetStrip
                             scope.launch { listState.scrollToItem(idx) }
                         },
                         onStripHeightChanged = { }
@@ -241,9 +178,9 @@ fun ContactListScreen(
         },
         bottomBar = {
             AppBottomPrimaryButton(
-                text = "Añadir contacto",
-                icon = Icons.Default.PersonAdd,
-                onClick = { showAddDialog = true }
+                text = "Marcar",
+                icon = Icons.Default.Dialpad,
+                onClick = onDialerClick
             )
             AppBottomSecondaryButton(
                 text = "Atrás",
@@ -252,144 +189,6 @@ fun ContactListScreen(
             )
         }
     )
-
-    if (showAddDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                if (!isSavingContact) {
-                    showAddDialog = false
-                    resetAddDialogState()
-                }
-            },
-            title = { Text("Nuevo contacto") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("Nombre") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newPhone,
-                        onValueChange = {
-                            newPhone = it
-                            phoneHasError = it.isNotBlank() && !isValidPhone(it)
-                        },
-                        label = { Text("Teléfono") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                        isError = phoneHasError,
-                        supportingText = {
-                            if (phoneHasError) {
-                                Text("Formato válido: +34600111222 o 600111222")
-                            }
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Foto",
-                        color = Color.Black,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 16.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(ContactCircleColor),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (selectedPhotoUri != null) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(context)
-                                        .data(selectedPhotoUri)
-                                        .crossfade(false)
-                                        .build(),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(CircleShape),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Image(
-                                    painter = painterResource(id = R.drawable.ic_menu_camera),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        OutlinedButton(onClick = { photoPicker.launch("image/*") }) {
-                            Text("Seleccionar foto")
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    enabled = !isSavingContact,
-                    modifier = Modifier.height(64.dp),
-                    onClick = {
-                        val name = newName.trim()
-                        val phone = newPhone.trim()
-                        if (name.isBlank() || phone.isBlank()) {
-                            Toast.makeText(
-                                context,
-                                "Nombre y teléfono son obligatorios",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            return@Button
-                        }
-                        if (!isValidPhone(phone)) {
-                            phoneHasError = true
-                            Toast.makeText(
-                                context,
-                                "El teléfono no tiene un formato válido",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            return@Button
-                        }
-                        val normalizedPhone = normalizePhone(phone)
-                        val input = NewContactInput(name, normalizedPhone, selectedPhotoBytes)
-                        if (hasWriteContactsPermission(context)) {
-                            saveContact(input)
-                        } else {
-                            pendingContactData = input
-                            requestWriteContacts.launch(Manifest.permission.WRITE_CONTACTS)
-                        }
-                    }
-                ) {
-                    if (isSavingContact) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("Guardar")
-                    }
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    enabled = !isSavingContact,
-                    modifier = Modifier.height(64.dp),
-                    onClick = {
-                        showAddDialog = false
-                        resetAddDialogState()
-                    }
-                ) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
 }
 
 @Composable
@@ -407,6 +206,35 @@ private fun SectionHeader(letter: String) {
             fontWeight = FontWeight.Bold,
             color = HeaderColor
         )
+    }
+}
+
+@Composable
+private fun FavoritesSectionHeader() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(HEADER_HEIGHT)
+            .background(Color(0xFFEEEEEE))
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = null,
+                tint = HeaderColor
+            )
+            Text(
+                text = "Favoritos",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = HeaderColor
+            )
+        }
     }
 }
 
@@ -530,7 +358,8 @@ fun ContactPhoto(
                 model = imageRequest,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize().clip(CircleShape),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                filterQuality = FilterQuality.Low
             )
         } else {
             Text(
@@ -543,15 +372,31 @@ fun ContactPhoto(
     }
 }
 
-private fun buildFlatList(contacts: List<Contact>): List<ContactListItem> {
+private fun buildFlatList(
+    contacts: List<Contact>,
+    favoriteContactIds: Set<Long>
+): List<ContactListItem> {
     val sorted = contacts
         .filter { it.name.isNotBlank() }
-        .sortedBy { it.name.uppercase() }
-    val result = ArrayList<ContactListItem>(sorted.size + 30)
+        .sortedWith(
+            compareBy<Contact> { normalizeNameForSorting(it.name) }
+                .thenBy { it.name.uppercase(Locale.ROOT) }
+        )
+    val favorites = sorted.filter { it.id in favoriteContactIds }
+    val others = sorted.filter { it.id !in favoriteContactIds }
+
+    val result = ArrayList<ContactListItem>(sorted.size + 32)
+
+    if (favorites.isNotEmpty()) {
+        result.add(ContactListItem.FavoritesHeader)
+        for (contact in favorites) {
+            result.add(ContactListItem.ContactRow(contact))
+        }
+    }
+
     var currentLetter = ""
-    for (contact in sorted) {
-        val first = contact.name.first().uppercaseChar()
-        val letter = if (first.isLetter()) first.toString() else "#"
+    for (contact in others) {
+        val letter = mapContactToGroup(contact.name)
         if (letter != currentLetter) {
             currentLetter = letter
             result.add(ContactListItem.Header(letter))
@@ -565,148 +410,51 @@ private fun buildLetterIndex(flatList: List<ContactListItem>): LinkedHashMap<Str
     val map = LinkedHashMap<String, Int>()
     for ((index, item) in flatList.withIndex()) {
         if (item is ContactListItem.Header) {
-            map[item.letter] = index
+            map.putIfAbsent(item.letter, index)
+        } else if (item is ContactListItem.FavoritesHeader) {
+            map.putIfAbsent(FAVORITES_SYMBOL, index)
         }
     }
     return map
 }
 
-private fun hasWriteContactsPermission(context: Context): Boolean {
-    return ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.WRITE_CONTACTS
-    ) == PackageManager.PERMISSION_GRANTED
+private fun mapContactToGroup(name: String): String {
+    val firstChar = name.trim().firstOrNull() ?: return "#"
+    val normalized = normalizeForGrouping(firstChar)
+    return if (normalized in 'A'..'Z') normalized.toString() else "#"
 }
 
-private fun normalizePhone(raw: String): String {
-    return raw
-        .replace(" ", "")
-        .replace("-", "")
-        .replace("(", "")
-        .replace(")", "")
+private fun normalizeForGrouping(char: Char): Char {
+    val normalized = Normalizer
+        .normalize(char.toString(), Normalizer.Form.NFD)
+        .replace(DIACRITICS_REGEX, "")
+        .uppercase(Locale.ROOT)
+    return normalized.firstOrNull() ?: char.uppercaseChar()
 }
 
-private fun isValidPhone(raw: String): Boolean {
-    val normalized = normalizePhone(raw)
-    return Regex("^\\+?[0-9]{6,15}$").matches(normalized)
+private fun normalizeNameForSorting(name: String): String {
+    return Normalizer
+        .normalize(name.trim(), Normalizer.Form.NFD)
+        .replace(DIACRITICS_REGEX, "")
+        .uppercase(Locale.ROOT)
 }
 
-private fun readAndCompressPhoto(context: Context, uri: Uri): ByteArray? {
-    val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
-        BitmapFactory.decodeStream(input)
-    } ?: return null
-    val out = ByteArrayOutputStream()
-    bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
-    return out.toByteArray()
-}
-
-private fun insertContactSync(
-    context: Context,
-    name: String,
-    phone: String,
-    photoBytes: ByteArray?
-): Boolean {
-    val operations = ArrayList<ContentProviderOperation>()
-    val googleAccount = resolveDefaultGoogleAccount(context)
-
-    operations.add(
-        ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
-            .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, googleAccount?.second)
-            .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, googleAccount?.first)
-            .build()
-    )
-
-    operations.add(
-        ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-            .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-            .withValue(
-                ContactsContract.Data.MIMETYPE,
-                ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE
-            )
-            .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
-            .build()
-    )
-
-    operations.add(
-        ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-            .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-            .withValue(
-                ContactsContract.Data.MIMETYPE,
-                ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE
-            )
-            .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, phone)
-            .withValue(
-                ContactsContract.CommonDataKinds.Phone.TYPE,
-                ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE
-            )
-            .build()
-    )
-
-    if (photoBytes != null) {
-        operations.add(
-            ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-                .withValue(
-                    ContactsContract.Data.MIMETYPE,
-                    ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE
-                )
-                .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, photoBytes)
-                .build()
-        )
+private fun findNextIndexForSymbol(
+    selectedSymbol: String,
+    allSymbols: List<String>,
+    indexMap: Map<String, Int>
+): Int? {
+    val start = allSymbols.indexOf(selectedSymbol).takeIf { it >= 0 } ?: return null
+    for (symbolIndex in start until allSymbols.size) {
+        val symbol = allSymbols[symbolIndex]
+        val index = indexMap[symbol]
+        if (index != null) return index
     }
 
-    return try {
-        context.contentResolver.applyBatch(ContactsContract.AUTHORITY, operations)
-        true
-    } catch (_: Exception) {
-        false
-    }
-}
-
-private fun resolveDefaultGoogleAccount(context: Context): Pair<String, String>? {
-    val settingsProjection = arrayOf(
-        ContactsContract.Settings.ACCOUNT_NAME,
-        ContactsContract.Settings.ACCOUNT_TYPE,
-        ContactsContract.Settings.SHOULD_SYNC
-    )
-    context.contentResolver.query(
-        ContactsContract.Settings.CONTENT_URI,
-        settingsProjection,
-        "${ContactsContract.Settings.ACCOUNT_TYPE} = ? AND ${ContactsContract.Settings.SHOULD_SYNC} = 1",
-        arrayOf("com.google"),
-        null
-    )?.use { cursor ->
-        val nameIdx = cursor.getColumnIndex(ContactsContract.Settings.ACCOUNT_NAME)
-        val typeIdx = cursor.getColumnIndex(ContactsContract.Settings.ACCOUNT_TYPE)
-        if (cursor.moveToFirst()) {
-            val accountName = cursor.getString(nameIdx).orEmpty()
-            val accountType = cursor.getString(typeIdx).orEmpty()
-            if (accountName.isNotBlank() && accountType == "com.google") {
-                return accountName to accountType
-            }
-        }
-    }
-
-    val rawProjection = arrayOf(
-        ContactsContract.RawContacts.ACCOUNT_NAME,
-        ContactsContract.RawContacts.ACCOUNT_TYPE
-    )
-    context.contentResolver.query(
-        ContactsContract.RawContacts.CONTENT_URI,
-        rawProjection,
-        "${ContactsContract.RawContacts.ACCOUNT_TYPE} = ?",
-        arrayOf("com.google"),
-        "${ContactsContract.RawContacts._ID} ASC"
-    )?.use { cursor ->
-        val nameIdx = cursor.getColumnIndex(ContactsContract.RawContacts.ACCOUNT_NAME)
-        val typeIdx = cursor.getColumnIndex(ContactsContract.RawContacts.ACCOUNT_TYPE)
-        while (cursor.moveToNext()) {
-            val accountName = cursor.getString(nameIdx).orEmpty()
-            val accountType = cursor.getString(typeIdx).orEmpty()
-            if (accountName.isNotBlank() && accountType == "com.google") {
-                return accountName to accountType
-            }
-        }
+    for (symbolIndex in (start - 1) downTo 0) {
+        val symbol = allSymbols[symbolIndex]
+        val index = indexMap[symbol]
+        if (index != null) return index
     }
 
     return null
