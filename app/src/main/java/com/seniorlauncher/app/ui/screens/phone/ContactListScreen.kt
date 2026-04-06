@@ -81,7 +81,10 @@ private val SIDEBAR_SYMBOLS = buildList {
 private sealed class ContactListItem {
     data object FavoritesHeader : ContactListItem()
     data class Header(val letter: String) : ContactListItem()
-    data class ContactRow(val contact: Contact) : ContactListItem()
+    data class ContactRow(
+        val contact: Contact,
+        val inFavoritesSection: Boolean
+    ) : ContactListItem()
 }
 
 @Composable
@@ -140,7 +143,13 @@ fun ContactListScreen(
                                 when (item) {
                                     is ContactListItem.FavoritesHeader -> "h_fav"
                                     is ContactListItem.Header -> "h_${item.letter}"
-                                    is ContactListItem.ContactRow -> item.contact.id
+                                    is ContactListItem.ContactRow -> {
+                                        if (item.inFavoritesSection) {
+                                            "fav_${item.contact.id}"
+                                        } else {
+                                            "row_${item.contact.id}"
+                                        }
+                                    }
                                 }
                             },
                             contentType = { item ->
@@ -197,8 +206,9 @@ private fun SectionHeader(letter: String) {
         modifier = Modifier
             .fillMaxWidth()
             .height(HEADER_HEIGHT)
-            .background(Color(0xFFEEEEEE)),
-        contentAlignment = Alignment.Center
+            .background(Color(0xFFEEEEEE))
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.CenterStart
     ) {
         Text(
             text = letter,
@@ -383,25 +393,24 @@ private fun buildFlatList(
                 .thenBy { it.name.uppercase(Locale.ROOT) }
         )
     val favorites = sorted.filter { it.id in favoriteContactIds }
-    val others = sorted.filter { it.id !in favoriteContactIds }
 
-    val result = ArrayList<ContactListItem>(sorted.size + 32)
+    val result = ArrayList<ContactListItem>(sorted.size + favorites.size + 32)
 
     if (favorites.isNotEmpty()) {
         result.add(ContactListItem.FavoritesHeader)
         for (contact in favorites) {
-            result.add(ContactListItem.ContactRow(contact))
+            result.add(ContactListItem.ContactRow(contact, inFavoritesSection = true))
         }
     }
 
     var currentLetter = ""
-    for (contact in others) {
+    for (contact in sorted) {
         val letter = mapContactToGroup(contact.name)
         if (letter != currentLetter) {
             currentLetter = letter
             result.add(ContactListItem.Header(letter))
         }
-        result.add(ContactListItem.ContactRow(contact))
+        result.add(ContactListItem.ContactRow(contact, inFavoritesSection = false))
     }
     return result
 }
